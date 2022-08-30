@@ -1,3 +1,47 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: testpmd
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer-testpmd
+  namespace: testpmd
+imagePullSecrets:
+- name: deployer-dockercfg-cfzqs
+secrets:
+- name: deployer-token-tm75w
+- name: deployer-dockercfg-cfzqs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: deployer-privileged-testpmd-rolebinding
+  namespace: testpmd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+- kind: ServiceAccount
+  name: deployer-testpmd
+  namespace: testpmd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: deployer-anyuid-testpmd-rolebinding
+  namespace: testpmd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:anyuid
+subjects:
+- kind: ServiceAccount
+  name: deployer-testpmd
+  namespace: testpmd
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,15 +62,17 @@ spec:
       labels:
         app: testpmd
       annotations:
-        k8s.v1.cni.cncf.io/networks: openshift-sriov-network-operator/sriov-nw-du-vfio-ens7f0,openshift-sriov-network-operator/sriov-nw-du-vfio-ens7f1
+        k8s.v1.cni.cncf.io/networks: testpmd/sriov-nw-du-test-pmd-e810-ens1f0, testpmd/sriov-nw-du-test-pmd-e810-ens1f1
         irq-load-balancing.crio.io: "disable"
         cpu-load-balancing.crio.io: "disable"
     spec:
-      runtimeClassName: "performance-performance-sno"
-      serviceAccount: deployer
-      serviceAccountName: deployer
+      runtimeClassName: "performance-sno-perfprofile"
+      serviceAccount: deployer-testpmd
+      serviceAccountName: deployer-testpmd
       securityContext:
         runAsUser: 0
+        capabilities:
+          add: ["IPC_LOCK","SYS_RESOURCE","NET_RAW","NET_ADMIN"]
       containers:
         - image: registry.redhat.io/openshift4/dpdk-base-rhel8
           command:
@@ -49,14 +95,14 @@ spec:
               cpu: "16"
               hugepages-1Gi: 8Gi
               memory: 2Gi
-              openshift.io/xxv710_ens7f0: "1"
-              openshift.io/xxv710_ens7f1: "1"
+              openshift.io/e810_ens1f0: "1"
+              openshift.io/e810_ens1f1: "1"
             requests:
               cpu: "16"
               hugepages-1Gi: 8Gi
               memory: 2Gi
-              openshift.io/xxv710_ens7f0: "1"
-              openshift.io/xxv710_ens7f1: "1"
+              openshift.io/e810_ens1f0: "1"
+              openshift.io/e810_ens1f1: "1"
           volumeMounts:
             - mountPath: /mnt/huge
               name: hugepage
