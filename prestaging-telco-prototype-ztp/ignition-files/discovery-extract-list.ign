@@ -1,0 +1,42 @@
+{
+  "ignition": {
+    "version": "3.1.0"
+  },
+  "systemd": {
+    "units": [{
+        "name": "var-mnt.mount",
+        "enabled": true,
+        "contents": "[Unit]\nDescription=Mount partition with artifacts\nBefore=precache-images.service\nBindsTo=precache-images.service\nStopWhenUnneeded=true\n\n[Mount]\nWhat=/dev/disk/by-partlabel/data\nWhere=/var/mnt\nType=xfs\nTimeoutSec=30\n\n[Install]\nRequiredBy=precache-images.service"
+    },
+    {
+        "name": "precache-images.service",
+        "enabled": true,
+        "contents": "[Unit]\nDescription=Extracts the precached images in discovery stage\nAfter=var-mnt.mount\nBefore=agent.service\n\n[Service]\nType=oneshot\nUser=root\nWorkingDirectory=/var/mnt/ai-images\nExecStart=bash /usr/local/bin/extract-ai.sh\nTimeoutStopSec=30\n\n[Install]\nWantedBy=multi-user.target default.target\nWantedBy=agent.service"
+     }
+    ]
+  },
+  "storage": {
+    "files": [
+    {
+      "overwrite": true,
+      "path": "/usr/local/bin/extract-ai.sh",
+      "mode": 755,
+      "user": {
+          "name": "root"
+      },
+      "contents": { "source": "data:,%23%21%2Fbin%2Fbash%0A%0AFOLDER%3D%22%24%7BFOLDER%3A-%24%28pwd%29%7D%22%0AOCP_RELEASE_LIST%3D%22%24%7BOCP_RELEASE_LIST%3A-initial-images.txt%7D%22%0ABINARY_FOLDER%3D%2Fusr%2Flocal%2Fbin%0A%0Apushd%20%24FOLDER%0A%0Atotal_copies%3D%24%28sort%20-u%20%24BINARY_FOLDER%2F%24OCP_RELEASE_LIST%20%7C%20wc%20-l%29%20%20%23%20Required%20to%20keep%20track%20of%20the%20pull%20task%20vs%20total%0Acurrent_copy%3D1%0A%0Awhile%20read%20-r%20line%3B%0Ado%0A%20%20uri%3D%24%28echo%20%22%24line%22%20%7C%20awk%20%27%7Bprint%241%7D%27%29%0A%20%20%23tar%3D%24%28echo%20%22%24line%22%20%7C%20awk%20%27%7Bprint%242%7D%27%29%0A%20%20podman%20image%20exists%20%24uri%0A%20%20if%20%5B%5B%20%24%3F%20-eq%200%20%5D%5D%3B%20then%0A%20%20%20%20%20%20echo%20%22Skipping%20existing%20image%20%24tar%22%0A%20%20%20%20%20%20echo%20%22Copying%20%24%7Buri%7D%20%5B%24%7Bcurrent_copy%7D%2F%24%7Btotal_copies%7D%5D%22%0A%20%20%20%20%20%20current_copy%3D%24%28%28current_copy%20%2B%201%29%29%0A%20%20%20%20%20%20continue%0A%20%20fi%0A%20%20tar%3D%24%28echo%20%22%24uri%22%20%7C%20%20rev%20%7C%20cut%20-d%20%22%2F%22%20-f1%20%7C%20rev%20%7C%20tr%20%22%3A%22%20%22_%22%29%0A%20%20tar%20zxvf%20%24%7Btar%7D.tgz%0A%20%20if%20%5B%20%24%3F%20-eq%200%20%5D%3B%20then%20rm%20-f%20%24%7Btar%7D.gz%3B%20fi%0A%20%20echo%20%22Copying%20%24%7Buri%7D%20%5B%24%7Bcurrent_copy%7D%2F%24%7Btotal_copies%7D%5D%22%0A%20%20skopeo%20copy%20dir%3A%2F%2F%24%28pwd%29%2F%24%7Btar%7D%20containers-storage%3A%24%7Buri%7D%0A%20%20if%20%5B%20%24%3F%20-eq%200%20%5D%3B%20then%20rm%20-rf%20%24%7Btar%7D%3B%20current_copy%3D%24%28%28current_copy%20%2B%201%29%29%3B%20fi%0Adone%20%3C%20%24%7BBINARY_FOLDER%7D%2F%24%7BOCP_RELEASE_LIST%7D%0A%0Aexit%200"
+    }
+  },
+  {
+    "overwrite": true,
+    "path": "/usr/local/bin/initial-images.txt",
+    "mode": 420,
+    "user": {
+        "name": "root"
+    },
+    "contents": { "source": "data:text/plain;charset=utf-8;base64,cXVheS5pby9vcGVuc2hpZnQtcmVsZWFzZS1kZXYvb2NwLXJlbGVhc2U6NC4xMS4wLXg4Nl82NApxdWF5LmlvL29wZW5zaGlmdC1yZWxlYXNlLWRldi9vY3AtdjQuMC1hcnQtZGV2QHNoYTI1NjoxZjc2ZmVhN2IyZWVkMTJlMGM3ZTBmMGRlNDc4NzY2M2UyMDI5MjMyY2FkZmVkN2U5YmI0NmY5YWExN2EwZjkxCnF1YXkuaW8vb3BlbnNoaWZ0LXJlbGVhc2UtZGV2L29jcC12NC4wLWFydC1kZXZAc2hhMjU2OmMzMjc3MmM2MTk5YTA1NGM4NjMxMjYyODVhOGIzMGNkYWRkNmIxMjk2Y2ZmMWU0ZjIyZDZkM2UzZjljODRhN2MKcXVheS5pby9vcGVuc2hpZnQtcmVsZWFzZS1kZXYvb2NwLXY0LjAtYXJ0LWRldkBzaGEyNTY6NTE1ZDRiOWZmNDQxMTkxMjU3ZDdiOWZmOTk2NjY3Mzc2ODJkM2I1ZTVhMTg3OWJhN2FiZGQxZTAxOWYxZGZmMgpxdWF5LmlvL29wZW5zaGlmdC1yZWxlYXNlLWRldi9vY3AtdjQuMC1hcnQtZGV2QHNoYTI1NjowNjRjN2MwMjU3ZDFkZTBjYWQxZDhlODgzYjUwNTg1M2JlZDUzZmQ4MzU2ODZkNDEwNWVjYTNjNGI3MzRlMGI1CnF1YXkuaW8vb3BlbnNoaWZ0LXJlbGVhc2UtZGV2L29jcC12NC4wLWFydC1kZXZAc2hhMjU2OjNlZDYzNGFjZDliMjllMTZiNTc4Yzc0YjM4ZDU0MjUxNTZjZDM5YmI3MmMwODg0YTk1NjQzMzFmOTVmODA5MTEKcXVheS5pby9vcGVuc2hpZnQtcmVsZWFzZS1kZXYvb2NwLXY0LjAtYXJ0LWRldkBzaGEyNTY6ZDM1YmJlNmUwOTBmMzJmMjZlZmFiYmU1MTVjZjExNTcwOTg1OTAyMTU1OTU2ODU5M2UwY2Y2ODNjNDQ4ZjlhMgpxdWF5LmlvL29wZW5zaGlmdC1yZWxlYXNlLWRldi9vY3AtdjQuMC1hcnQtZGV2QHNoYTI1Njo4NTZhMjA5N2UwMWRiYWFkNjE0YjBmNTc1NzBhNTYxNmQ5OWU1MzQ4ZWE2ZjM1YWQ0Y2VhMmZkZDZkMTgxMjZiCnF1YXkuaW8vb3BlbnNoaWZ0LXJlbGVhc2UtZGV2L29jcC12NC4wLWFydC1kZXZAc2hhMjU2OjA5ZDBlYWU0M2FhNjg5YWRkN2FlZTI3MDRiNTQ3YTEwYzE0MjNmNGQwNjViNzc3YWM0MDI2MDU3OGViZGZjZGQKcXVheS5pby9vcGVuc2hpZnQtcmVsZWFzZS1kZXYvb2NwLXY0LjAtYXJ0LWRldkBzaGEyNTY6ODMwNzA1N2FjZDNhZjhkYWRmODczMjNiZmU5ZTJkNGQ5ZTc0YTU5MTBjZmUxNzM3M2Y5YjMwYTk2YzdhNzk2ZgpxdWF5LmlvL29wZW5zaGlmdC1yZWxlYXNlLWRldi9vY3AtdjQuMC1hcnQtZGV2QHNoYTI1NjpmY2UxNTc5NDRjNWIwY2IwYThhZDdjNmRmN2JjNzhjMjY1ZTcwYjU0N2EwZTYzMGVmZTdkZDQwOWJmOTAzNDBkCnF1YXkuaW8vb3BlbnNoaWZ0LXJlbGVhc2UtZGV2L29jcC12NC4wLWFydC1kZXZAc2hhMjU2OjUwNmFjYWNkNTdiNmNmNTE3MjJhNDEyNzhjMDI3OGEyOGRmNjhhYzg2ZDEzMWM1OWZmOGI2ODdkNjI1NGFjYTMKcXVheS5pby9vcGVuc2hpZnQtcmVsZWFzZS1kZXYvb2NwLXY0LjAtYXJ0LWRldkBzaGEyNTY6MDRlNjU5Yzk0YTlkMWFhYTQ2ZDMxZjAyMzEyNmJlNTA1N2FmMTFjNzVmMzI5MjJiZDE1YzZlZTUzZTQ1NTE2NwpxdWF5LmlvL29wZW5zaGlmdC1yZWxlYXNlLWRldi9vY3AtdjQuMC1hcnQtZGV2QHNoYTI1NjozYWJlNjVkZjg5MmQ5MWI2ZjIxOTk4M2JkNGVjYzcxZWYyNGE3OGJiYzRjNzc5ZWYxMWM1Y2ViZjNiZmY2ODc5CnF1YXkuaW8vb3BlbnNoaWZ0LXJlbGVhc2UtZGV2L29jcC12NC4wLWFydC1kZXZAc2hhMjU2OjI1MjgxMzgwMGFkZjgxNDBjNDA4ZTZhYTA5NTZjY2FjOGY5YTNkZGQ0Y2Y3NDNmMTQwZmNhZWY2MWIyMzc2MmYKcmVnaXN0cnkucmVkaGF0LmlvL211bHRpY2x1c3Rlci1lbmdpbmUvYXNzaXN0ZWQtaW5zdGFsbGVyLWFnZW50LXJoZWw4QHNoYTI1Njo1NGY3Mzc2ZTUyMWEzYjIyZGRlZWY2MzYyM2ZjNzI1NmFkZGY2MmE5MzIzZmEwMDRjN2Y0OGVmYTczODhmZTM5CnJlZ2lzdHJ5LnJlZGhhdC5pby9tdWx0aWNsdXN0ZXItZW5naW5lL2Fzc2lzdGVkLWluc3RhbGxlci1yaGVsOEBzaGEyNTY6M2VhMDU4MmIxNGU3ODcxNGIyMjlhZDM4MTkxMTI1NmEzOTdlMGYwN2E5MWY1MTAyNjY3ZTJjY2VmZTdlN2Y3ZgpxdWF5LmlvL2Fsb3NhZGFnL3Ryb3VibGVzaG9vdDpsYXRlc3QK"
+   }
+ }
+ ]  
+ }
+}
